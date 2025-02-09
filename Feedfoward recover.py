@@ -245,11 +245,10 @@ def main():
     # For plotting norms
     #batch_gradient_norms = []
     # Open a CSV file to log results
-    with open("training_results.csv", mode="w", newline="") as csv_file:
+    with open("C:/Users/FMayi/PycharmProjects/AI535/A2/hw2/training_results.csv", mode="w", newline="") as csv_file:
         writer = csv.writer(csv_file)
         # Write header row
         writer.writerow(["Epoch", "Train Loss", "Train Acc", "Train Error", "Val Loss", "Val Acc", "Val Error"])
-
     # Q2 TODO: For each epoch below max epochs
         for epoch in range(max_epochs):
             # Scramble order of examples
@@ -301,10 +300,11 @@ def main():
             error = 1 - accs[-1]
             val_error = 1 - val_accs[-1]
             # Log the current epoch's results to CSV
-            print(f"Writing epoch {epoch + 1} data to CSV")
-            writer.writerow([epoch + 1, f"{losses[-1]:.4f}", f"{accs[-1]:.4f}",
-                             f"{error:.4f}", f"{val_losses[-1]:.4f}", f"{val_accs[-1]:.4f}",
-                             f"{val_error:.4f}"])
+
+            row =[epoch + 1, f"{losses[-1]:.4f}", f"{accs[-1]:.4f}", f"{error:.4f}", f"{val_losses[-1]:.4f}", f"{val_accs[-1]:.4f}", f"{val_error:.4f}"]
+            print(f"Writing row:", row)
+            writer.writerow(row)
+            csv_file.flush()
 
             # Evaluate performance on test.
 
