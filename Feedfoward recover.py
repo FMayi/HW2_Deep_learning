@@ -30,12 +30,9 @@ class SigmoidCrossEntropy:
         self.loss = None
         self.batch_size = None
         self.logits = None
-
-
     # Compute the cross entropy loss after sigmoid. The reason they are put into the same layer is because the gradient has a simpler form
     # logits -- batch_size x num_classes set of scores, logits[i,j] is score of class j for batch element i
     # labels -- batch_size x 1 vector of integer label id (0,1) where labels[i] is the label for batch element i
-
     # TODO: Output should be a positive scalar value equal to the average cross entropy loss after sigmoid
     def forward(self, logits, labels):
         # TODO: Compute the gradient of the cross entropy loss with respect to the the input logits
@@ -54,9 +51,7 @@ class SigmoidCrossEntropy:
     def backward(self):
         gradient_of_loss = self.sigmoid - self.labels
         norm = np.linalg.norm(gradient_of_loss)
-        print(f"Gradient Norm SigmoidCrossEntropy: {norm}")
         return gradient_of_loss
-    # raise Exception('Student error: You haven\'t implemented the backward pass for SigmoidCrossEntropy yet.')
 
 
 class ReLU:
@@ -65,17 +60,11 @@ class ReLU:
     def forward(self, input):
         self.input = input
         return np.maximum(0, input)
-
-    ## Not so sure if right FMA 02.03.25
     # TODO: Given dL/doutput, return dL/dinput
     def backward(self, grad):
         self.grad = grad
         grad_base = np.where(self.input > 0, 1, 0)
-        print(f"Gradient Norm RELU: {np.linalg.norm(grad)}")
         return grad_base * self.grad
-
-        # raise Exception('Student error: You haven\'t implemented the backward pass for ReLU yet.')
-
     # No parameters so nothing to do during a gradient descent step
     def step(self, step_size, momentum=0, weight_decay=0):
         return
@@ -90,11 +79,8 @@ class LinearLayer:
         self.output_dim = output_dim
         self.fan_in = input_dim
         self.fan_out = output_dim
-        #self.W = np.random.randn(self.fan_in, self.fan_out) * np.sqrt(1.0 / self.fan_in)
         self.W = np.random.randn(self.fan_in, self.fan_out) * np.sqrt(2.0 / self.fan_in)
-        # self.W = np.random.randn(input_dim, output_dim)*.01
         self.b = np.zeros((1, output_dim))
-        # raise Exception('Student error: You haven\'t implemented the init for LinearLayer yet.')
 
     # TODO: During the forward pass, we simply compute XW+b
     def forward(self, input):
@@ -141,7 +127,6 @@ class LinearLayer:
         norm = np.linalg.norm(self.grad_weights)
         if norm > max_norm:
             self.grad_weights = (self.grad_weights / norm) * max_norm
-        print(f"Gradient Norm Linear: {norm}")
         return np.dot(grad, self.W.T)
 
         # Return Value:
@@ -169,8 +154,6 @@ class LinearLayer:
         # Update weights and biases
         self.W -= self.velocity_w
         self.b -= self.velocity_b
-
-        # raise Exception('Student error: You haven\'t implemented the step for LinearLayer yet.')
 
 
 ######################################################
@@ -205,14 +188,14 @@ def evaluate(model, X_val, Y_val, batch_size):
 
 def main():
     # TODO: Set optimization parameters (NEED TO SUPPLY THESE)
-    batch_size = 256
+    batch_size = 64
     max_epochs = 50
     step_size = 0.0001
 
     number_of_layers = 2
-    width_of_layers = 128
-    weight_decay = 0.00005
-    momentum = 0.8
+    width_of_layers = 256
+    weight_decay = 0.01
+    momentum = 0.9
 
     # Load data
     data = pickle.load(open('cifar_2class_py3.p', 'rb'))
@@ -248,7 +231,7 @@ def main():
     with open("C:/Users/FMayi/PycharmProjects/AI535/A2/hw2/training_results.csv", mode="w", newline="") as csv_file:
         writer = csv.writer(csv_file)
         # Write header row
-        writer.writerow(["Epoch", "Train Loss", "Train Acc", "Train Error", "Val Loss", "Val Acc", "Val Error"])
+        writer.writerow(["Epoch", "Train Objective", "Train Acc", "Train misclassification ER", "Testing Objective", "Testing Acc", "Testing misclassification ER"])
     # Q2 TODO: For each epoch below max epochs
         for epoch in range(max_epochs):
             # Scramble order of examples
@@ -282,10 +265,6 @@ def main():
                 grad = loss_funct.backward()
                 net.backward(grad)
 
-                # FMA for gradient plot
-                #grad_norm = np.linalg.norm(grad)  # Compute the norm of the gradient
-                #batch_gradient_norms.append(grad_norm)  # Store it
-
                 # Take optimizer step
                 net.step(step_size, momentum, weight_decay)
             # Book-keeping for loss / accuracy
@@ -302,7 +281,6 @@ def main():
             # Log the current epoch's results to CSV
 
             row =[epoch + 1, f"{losses[-1]:.4f}", f"{accs[-1]:.4f}", f"{error:.4f}", f"{val_losses[-1]:.4f}", f"{val_accs[-1]:.4f}", f"{val_error:.4f}"]
-            print(f"Writing row:", row)
             writer.writerow(row)
             csv_file.flush()
 
@@ -347,9 +325,9 @@ def main():
         # Plot training and testing curves
         fig, ax1 = plt.subplots(figsize=(16, 9))
         color = 'tab:red'
-        ax1.plot(range(len(losses)), losses, c=color, alpha=0.25, label="Train Loss")
+       # ax1.plot(range(len(losses)), losses, c=color, alpha=0.85, label="Training Objective")
         ax1.plot([np.ceil((i + 1) * len(X_train) / batch_size) for i in range(len(val_losses))],
-                 val_losses, c="red", label="Val. Loss")
+                 val_losses, c="red", label="Testing Objective")
         ax1.set_xlabel("Iterations")
         ax1.set_ylabel("Avg. Cross-Entropy Loss", c=color)
         ax1.tick_params(axis='y', labelcolor=color)
@@ -357,9 +335,9 @@ def main():
 
         ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
         color = 'tab:blue'
-        ax2.plot(range(len(losses)), accs, c=color, label="Train Acc.", alpha=0.25)
+        #ax2.plot(range(len(losses)), accs, c=color, label="Training Acc.", alpha=0.85)
         ax2.plot([np.ceil((i + 1) * len(X_train) / batch_size) for i in range(len(val_accs))], val_accs,
-                 c="blue", label="Val. Acc.")
+                 c="blue", label="Testing Acc.")
         ax2.set_ylabel(" Accuracy", c=color)
         ax2.tick_params(axis='y', labelcolor=color)
         ax2.set_ylim(-0.01, 1.01)
@@ -378,7 +356,6 @@ def main():
 class FeedForwardNeuralNetwork:
 
     def __init__(self, input_dim, output_dim, hidden_dim, num_layers):
-        #needed?
         self.layers = []
         if num_layers == 1:
             self.layers = [LinearLayer(input_dim, output_dim)]
@@ -394,13 +371,8 @@ class FeedForwardNeuralNetwork:
     # TODO: Please create a network with hidden layers based on the parameters
 
     def forward(self, X):
-        # print(f"Network forward input shape: {X.shape}")
         for layer in self.layers:
-            # print(f"Passing through layer: {layer.__class__.__name__}")
-
             X = layer.forward(X)
-        # print(f"Output shape after {layer.__class__.__name__}: {X.shape}")
-
         return X
 
     def backward(self, grad):
