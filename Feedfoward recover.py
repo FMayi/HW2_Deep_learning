@@ -1,5 +1,6 @@
 
 from turtle import width
+import csv
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
@@ -185,7 +186,9 @@ def evaluate(model, X_val, Y_val, batch_size):
     for i in range(0, num_examples, batch_size):
         x_batch = X_val[i:i + batch_size]
         y_batch = Y_val[i:i + batch_size]
-        prediction = np.clip(model.forward(x_batch), 1e-7, 1 - 1e-7)
+        logits = model.forward(x_batch)
+        probs = 1/(1+np.exp(-logits))
+        prediction = np.clip(probs, 1e-7, 1 - 1e-7)
 
         batch_loss = -np.mean(y_batch * np.log(prediction + eps) + (1 - y_batch) * np.log(1 - prediction + eps))
         total_loss += batch_loss * x_batch.shape[0]
@@ -217,10 +220,12 @@ def main():
     Y_train = data['train_labels']
     X_test = data['test_data']
     Y_test = data['test_labels']
-    Y_test = data['test_labels']
 
-    X_train = (X_train-np.mean(X_train))/np.std(X_train)
-    X_test = (X_test - np.mean(X_test))/np.std(X_test)
+    eps = 1e-9
+    train_mean = np.mean(X_train, axis=0)
+    train_std = np.std(X_train, axis=0)
+    X_train = (X_train-train_mean)/(train_std + eps)
+    X_test = (X_test - train_mean)/(train_std + eps)
     # Some helpful dimensions
     num_examples, input_dim = X_train.shape
     output_dim = 1  # number of class labels -1 for sigmoid loss
@@ -239,119 +244,130 @@ def main():
 
     # For plotting norms
     #batch_gradient_norms = []
+    # Open a CSV file to log results
+    with open("training_results.csv", mode="w", newline="") as csv_file:
+        writer = csv.writer(csv_file)
+        # Write header row
+        writer.writerow(["Epoch", "Train Loss", "Train Acc", "Train Error", "Val Loss", "Val Acc", "Val Error"])
 
     # Q2 TODO: For each epoch below max epochs
-    for epoch in range(max_epochs):
-        # Scramble order of examples
-        indices = np.random.permutation(num_examples)
-        X_train, Y_train = X_train[indices], Y_train[indices]
-        epoch_loss = 0
-        correct_pred = 0
-        total_s = 0
+        for epoch in range(max_epochs):
+            # Scramble order of examples
+            indices = np.random.permutation(num_examples)
+            X_train, Y_train = X_train[indices], Y_train[indices]
+            epoch_loss = 0
+            correct_pred = 0
+            total_s = 0
 
 
-        num_batches = num_examples // batch_size
-        # for each batch in data:
-        # Gather batch
-        for i in range(0, num_examples, batch_size):
-            X_batch = X_train[i:i + batch_size]
-            Y_batch = Y_train[i:i + batch_size]
+            num_batches = num_examples // batch_size
+            # for each batch in data:
+            # Gather batch
+            for i in range(0, num_examples, batch_size):
+                X_batch = X_train[i:i + batch_size]
+                Y_batch = Y_train[i:i + batch_size]
 
-            # Compute forward pass
-            predictions = net.forward(X_batch)
-            # Compute loss
-            if predictions is None:
-                print("Error: predictions is None!")
-                exit()
-            loss = loss_funct.forward(predictions, Y_batch)
-            epoch_loss += loss *X_batch.shape[0]
+                # Compute forward pass
+                predictions = net.forward(X_batch)
+                # Compute loss
+                if predictions is None:
+                    print("Error: predictions is None!")
+                    exit()
+                loss = loss_funct.forward(predictions, Y_batch)
+                epoch_loss += loss *X_batch.shape[0]
 
-            correct_batch = np.sum((predictions > 0.5).astype(int) == Y_batch.reshape(-1,1))
-            correct_pred += correct_batch
-            total_s += Y_batch.shape[0]
-            # Backward loss and networks
-            grad = loss_funct.backward()
-            net.backward(grad)
+                correct_batch = np.sum((predictions > 0.5).astype(int) == Y_batch.reshape(-1,1))
+                correct_pred += correct_batch
+                total_s += Y_batch.shape[0]
+                # Backward loss and networks
+                grad = loss_funct.backward()
+                net.backward(grad)
 
-            # FMA for gradient plot
-            #grad_norm = np.linalg.norm(grad)  # Compute the norm of the gradient
-            #batch_gradient_norms.append(grad_norm)  # Store it
+                # FMA for gradient plot
+                #grad_norm = np.linalg.norm(grad)  # Compute the norm of the gradient
+                #batch_gradient_norms.append(grad_norm)  # Store it
 
-            # Take optimizer step
-            net.step(step_size, momentum, weight_decay)
-        # Book-keeping for loss / accuracy
-        losses.append(epoch_loss / total_s)  # Average loss per epoch
-        accs.append(correct_pred / total_s)
+                # Take optimizer step
+                net.step(step_size, momentum, weight_decay)
+            # Book-keeping for loss / accuracy
+            losses.append(epoch_loss / total_s)  # Average loss per epoch
+            accs.append(correct_pred / total_s)
 
-        val_loss, val_acc = evaluate(net, X_test, Y_test, batch_size)
-        val_losses.append(val_loss)
-        val_accs.append(val_acc)
+            val_loss, val_acc = evaluate(net, X_test, Y_test, batch_size)
+            val_losses.append(val_loss)
+            val_accs.append(val_acc)
 
 
-        error = 1 - accs[-1]
-        val_error = 1 - val_accs[-1]
-        # Evaluate performance on test.
+            error = 1 - accs[-1]
+            val_error = 1 - val_accs[-1]
+            # Log the current epoch's results to CSV
+            print(f"Writing epoch {epoch + 1} data to CSV")
+            writer.writerow([epoch + 1, f"{losses[-1]:.4f}", f"{accs[-1]:.4f}",
+                             f"{error:.4f}", f"{val_losses[-1]:.4f}", f"{val_accs[-1]:.4f}",
+                             f"{val_error:.4f}"])
 
-        # val_loss, tacc = evaluate(net, X_test, Y_test, batch_size)
-        # print(tacc)
+            # Evaluate performance on test.
+
+            # val_loss, tacc = evaluate(net, X_test, Y_test, batch_size)
+            # print(tacc)
+
+            ###############################################################
+            # Print some stats about the optimization process after each epoch
+            ###############################################################
+            # epoch_avg_loss -- average training loss across batches this epoch
+            print(f"Epoch {epoch + 1}/{max_epochs}: ")
+            print(f"Train _Loss: {losses[-1]:.4f}\n")
+            # epoch_avg_acc -- average accuracy across batches this epoch
+            print(f"Train _Acc: {accs[-1]:.4f}, \n")
+            print(f"Error:  {error}")
+            # vacc -- testing accuracy this epoch
+            print(f"Val_Acc: {val_accs[-1]:.4f}\n")
+            print(f"Val_error: {val_error}")
+            # Val_losses
+            print(f"Val_Loss: {val_losses[-1]:.4f}\n")
+        ###############################################################
+        # plt.plot(batch_gradient_norms, label="Batch Gradient Norms (SigmoidCrossEntropy)")
+        # plt.xlabel("Batch Iterations")
+        # plt.ylabel("Gradient Norm")
+        # plt.legend()
+        # plt.show()
+
+        # logging.info("[Epoch {:3}]   Loss:  {:8.4}     Train Acc:  {:8.4}%      Val Acc:  {:8.4}%".format(i,epoch_avg_loss, epoch_avg_acc, vacc*100))
 
         ###############################################################
-        # Print some stats about the optimization process after each epoch
+        # Code for producing output plot requires
         ###############################################################
-        # epoch_avg_loss -- average training loss across batches this epoch
-        print(f"Epoch {epoch + 1}/{max_epochs}: ")
-        print(f"Train _Loss: {losses[-1]:.4f}\n")
-        # epoch_avg_acc -- average accuracy across batches this epoch
-        print(f"Train _Acc: {accs[-1]:.4f}, \n")
-        print(f"Error:  {error}")
-        # vacc -- testing accuracy this epoch
-        print(f"Val_Acc: {val_accs[-1]:.4f}\n")
-        print(f"Val_error: {val_error}")
-        # Val_losses
-        print(f"Val_Loss: {val_losses[-1]:.4f}\n")
-    ###############################################################
-    # plt.plot(batch_gradient_norms, label="Batch Gradient Norms (SigmoidCrossEntropy)")
-    # plt.xlabel("Batch Iterations")
-    # plt.ylabel("Gradient Norm")
-    # plt.legend()
-    # plt.show()
+        # losses -- a list of average loss per batch in training
+        # accs -- a list of accuracies per batch in training
+        # val_losses -- a list of average testing loss at each epoch
+        # val_acc -- a list of testing accuracy at each epoch
+        # batch_size -- the batch size
+        ################################################################
 
-    # logging.info("[Epoch {:3}]   Loss:  {:8.4}     Train Acc:  {:8.4}%      Val Acc:  {:8.4}%".format(i,epoch_avg_loss, epoch_avg_acc, vacc*100))
+        # Plot training and testing curves
+        fig, ax1 = plt.subplots(figsize=(16, 9))
+        color = 'tab:red'
+        ax1.plot(range(len(losses)), losses, c=color, alpha=0.25, label="Train Loss")
+        ax1.plot([np.ceil((i + 1) * len(X_train) / batch_size) for i in range(len(val_losses))],
+                 val_losses, c="red", label="Val. Loss")
+        ax1.set_xlabel("Iterations")
+        ax1.set_ylabel("Avg. Cross-Entropy Loss", c=color)
+        ax1.tick_params(axis='y', labelcolor=color)
+        # ax1.set_ylim(-0.01,3)
 
-    ###############################################################
-    # Code for producing output plot requires
-    ###############################################################
-    # losses -- a list of average loss per batch in training
-    # accs -- a list of accuracies per batch in training
-    # val_losses -- a list of average testing loss at each epoch
-    # val_acc -- a list of testing accuracy at each epoch
-    # batch_size -- the batch size
-    ################################################################
+        ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+        color = 'tab:blue'
+        ax2.plot(range(len(losses)), accs, c=color, label="Train Acc.", alpha=0.25)
+        ax2.plot([np.ceil((i + 1) * len(X_train) / batch_size) for i in range(len(val_accs))], val_accs,
+                 c="blue", label="Val. Acc.")
+        ax2.set_ylabel(" Accuracy", c=color)
+        ax2.tick_params(axis='y', labelcolor=color)
+        ax2.set_ylim(-0.01, 1.01)
 
-    # Plot training and testing curves
-    fig, ax1 = plt.subplots(figsize=(16, 9))
-    color = 'tab:red'
-    ax1.plot(range(len(losses)), losses, c=color, alpha=0.25, label="Train Loss")
-    ax1.plot([np.ceil((i + 1) * len(X_train) / batch_size) for i in range(len(val_losses))],
-             val_losses, c="red", label="Val. Loss")
-    ax1.set_xlabel("Iterations")
-    ax1.set_ylabel("Avg. Cross-Entropy Loss", c=color)
-    ax1.tick_params(axis='y', labelcolor=color)
-    # ax1.set_ylim(-0.01,3)
-
-    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-    color = 'tab:blue'
-    ax2.plot(range(len(losses)), accs, c=color, label="Train Acc.", alpha=0.25)
-    ax2.plot([np.ceil((i + 1) * len(X_train) / batch_size) for i in range(len(val_accs))], val_accs,
-             c="blue", label="Val. Acc.")
-    ax2.set_ylabel(" Accuracy", c=color)
-    ax2.tick_params(axis='y', labelcolor=color)
-    ax2.set_ylim(-0.01, 1.01)
-
-    fig.tight_layout()  # otherwise the right y-label is slightly clipped
-    ax1.legend(loc="center")
-    ax2.legend(loc="center right")
-    plt.show()
+        fig.tight_layout()  # otherwise the right y-label is slightly clipped
+        ax1.legend(loc="center")
+        ax2.legend(loc="center right")
+        plt.show()
 
 
 #####################################################
